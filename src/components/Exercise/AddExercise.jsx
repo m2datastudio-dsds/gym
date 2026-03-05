@@ -1,0 +1,214 @@
+import React, { useState, useEffect } from 'react';
+import { Button, Input, Row, Col, Form, Divider, Space, Upload, notification } from 'antd';
+import { PlusOutlined, MinusCircleOutlined, UploadOutlined } from '@ant-design/icons';
+import { useMediaQuery } from 'react-responsive';
+import { v4 as uuidv4 } from 'uuid';
+import { saveExercisePlan } from '../../Services/data.services'; // Assuming you have this service ready
+
+const AddExercise = ({ onBack, onSaveSuccess }) => {
+  const [form] = Form.useForm();
+  const [days, setDays] = useState([{ id: uuidv4(), day: 'Day 1', items: [{ id: uuidv4() }] }]);
+  const [isSticky, setIsSticky] = useState(false);
+  const [fileList, setFileList] = useState([]); // Manage file list for upload
+
+  // Media queries for responsiveness
+  const isSmallScreen = useMediaQuery({ query: '(max-width: 576px)' });
+  const isMediumScreen = useMediaQuery({ query: '(min-width: 577px) and (max-width: 992px)' });
+  const isLargeScreen = useMediaQuery({ query: '(min-width: 993px)' });
+
+  const getColSpan = () => {
+    if (isSmallScreen) return 24;  
+    if (isMediumScreen) return 12; 
+    return 8; 
+  };
+
+  const addDay = () => {
+    setDays([...days, { id: uuidv4(), day: `Day ${days.length + 1}`, items: [{ id: uuidv4() }] }]);
+  };
+
+  const addRow = (dayIndex) => {
+    const newDays = [...days];
+    newDays[dayIndex].items.push({ id: uuidv4() });
+    setDays(newDays);
+  };
+
+  const removeRow = (dayIndex, itemId) => {
+    let newDays = [...days];
+    newDays[dayIndex].items = newDays[dayIndex].items.filter(item => item.id !== itemId);
+
+    if (newDays[dayIndex].items.length === 0 && newDays.length > 1) {
+      newDays.splice(dayIndex, 1);
+    }
+
+    newDays = newDays.map((day, index) => ({
+      ...day,
+      day: `Day ${index + 1}`,
+    }));
+
+    setDays(newDays);
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        setIsSticky(true);
+      } else {
+        setIsSticky(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  const handleInputChange = (dayIndex, itemIndex, field, value) => {
+    const newDays = [...days];
+    newDays[dayIndex].items[itemIndex][field] = value;
+    setDays(newDays);
+  };
+
+  const handleFileChange = (info) => {
+    setFileList(info.fileList);
+  };
+
+  const handleSave = async () => {
+    try {
+      const values = await form.validateFields();
+  
+      const formData = new FormData();
+      formData.append('planname', values.planname);
+      formData.append('assign', values.assign || '');
+  
+      if (fileList.length > 0) {
+        formData.append('file', fileList[0].originFileObj);
+      }
+  
+      // Construct the details array to match the expected structure
+      const detailsArray = days.map((day, dayIndex) => ({
+        day: day.day,
+        exercises: day.items.map((item, itemIndex) => ({
+          siNo: itemIndex + 1,
+          exercise: item.exercise || '',
+          repsSets: item.repsSets || '',
+          videoLink: item.videoLink || ''
+        }))
+      }));
+  
+      formData.append('details', JSON.stringify(detailsArray));
+  
+      await saveExercisePlan(formData); 
+  
+      notification.success({
+        message: 'Success',
+        description: 'Exercise Plan saved successfully!',
+      });
+
+      onBack(); 
+      onSaveSuccess();
+    } catch (error) {
+      notification.error({
+        message: 'Error',
+        description: 'Failed to save Exercise Plan!',
+      });
+      console.error('Error saving Exercise plan:', error);
+    }
+  };
+  
+  
+
+  return (
+    <div style={{ padding: '0 20px 20px' }}>
+      <h2 style={{ marginBottom: '15px' }}>Exercise Plan</h2>
+      
+      <Button type="primary" onClick={onBack} style={{ marginBottom: '20px' }}>
+        Back to List
+      </Button>
+
+      <Form layout="vertical" form={form}>
+        <Row gutter={16} style={{ marginBottom: '20px' }}>
+          <Col span={getColSpan()}>
+            <Form.Item label="Exercise Plan Name" name="planname" rules={[{ required: true, message: 'Plan name is required' }]}>
+              <Input placeholder="Enter exercise plan name" size="large" />
+            </Form.Item>
+          </Col>
+          <Col span={getColSpan()}>
+            <Form.Item label="Assign To" name="assign">
+              <Input placeholder="Enter assigned person" size="large" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <h3 style={{ marginTop: '20px', marginBottom: '10px', fontWeight: 'bold' }}>Exercise Details</h3>
+
+        <div className={`add-day-button-container ${isSticky ? 'sticky' : ''}`}>
+          <Button type="dashed" onClick={() => addDay()} icon={<PlusOutlined />} style={{ width: '120px', textAlign: 'center' }}>
+            Add Day
+          </Button>
+        </div>
+
+        {days.map((day, dayIndex) => (
+          <div key={day.id} style={{ marginBottom: '20px' }}>
+            <Divider orientation="left">{day.day}</Divider>
+
+            {day.items.map((item, itemIndex) => (
+              <Row gutter={16} key={item.id} style={{ marginBottom: '10px', textAlign: 'center' }}>
+                <Col span={isSmallScreen ? 24 : 4}>
+                  <span>{itemIndex + 1}</span>
+                </Col>
+                <Col span={isSmallScreen ? 24 : 4}>
+                  <Form.Item label="Exercise">
+                    <Input placeholder="Enter Exercise" value={item.exercise} onChange={(e) => handleInputChange(dayIndex, itemIndex, 'exercise', e.target.value)} />
+                  </Form.Item>
+                </Col>
+                <Col span={isSmallScreen ? 24 : 4}>
+                  <Form.Item label="Reps & Sets">
+                    <Input placeholder="Enter Reps & Sets" value={item.repsSets} onChange={(e) => handleInputChange(dayIndex, itemIndex, 'repsSets', e.target.value)} />
+                  </Form.Item>
+                </Col>
+                <Col span={isSmallScreen ? 24 : 4}>
+                  <Form.Item label="Video Link">
+                    <Input placeholder="Enter Video Link" value={item.videoLink} onChange={(e) => handleInputChange(dayIndex, itemIndex, 'videoLink', e.target.value)} />
+                  </Form.Item>
+                </Col>
+                <Col span={isSmallScreen ? 24 : 4} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <Space>
+                    <Button type="dashed" onClick={() => addRow(dayIndex)} icon={<PlusOutlined />} />
+                    <Button type="dashed" danger onClick={() => removeRow(dayIndex, item.id)} icon={<MinusCircleOutlined />} disabled={days.length === 1 && day.items.length === 1} />
+                  </Space>
+                </Col>
+              </Row>
+            ))}
+          </div>
+        ))}
+
+        <Form.Item label="Upload Plan">
+          <Upload fileList={fileList} onChange={handleFileChange} beforeUpload={() => false}>
+            <Button icon={<UploadOutlined />}>Choose File</Button>
+          </Upload>
+        </Form.Item>
+
+        <Form.Item>
+          <Button type="primary" onClick={handleSave} style={{ marginRight: '10px' }}>Save</Button>
+          <Button type="default" onClick={onBack}>Cancel</Button>
+        </Form.Item>
+      </Form>
+
+      <style jsx>{`
+        .add-day-button-container {
+          margin-top: 20px;
+          position: relative;
+        }
+        .add-day-button-container.sticky {
+          position: fixed;
+          bottom: 20px;
+          z-index: 1000;
+          transition: opacity 0.3s;
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default AddExercise;

@@ -1,0 +1,59 @@
+{
+    "appId": "com.gym.app",
+    "productName": "GymApp",
+    "copyright": "GYM",
+    "directories": {
+        "app": ".",
+        "output": "out",
+        "buildResources": "assets"
+    },
+    "extraMetadata": {
+        "environment": {
+          "NODE_ENV": "production"
+        }
+      },
+    "extraResources": [
+        "build/public",
+        {
+            "from":"DB",
+            "to":"DB",
+            "filter":["**/*"]
+        }
+      ], 
+    "files": [
+        "package.json",
+        "build/**/*",
+        "node_modules"
+    ], 
+    "dmg": { 
+        "backgroundColor": "#ffffff",
+        "window": {
+            "width": "400",
+            "height": "300"
+        },
+        "contents": [
+            {
+                "x": 100,
+                "y": 100
+            },
+            {
+                "x": 300,
+                "y": 100,
+                "type": "link",
+                "path": "/Applications"
+            }
+        ]
+    },
+    "mac": {
+        "target": "dmg",
+        "category": "public.app-category.utilities"
+      },
+    "win": {
+        "target": "nsis"
+    },
+    "linux": {
+        "target": "AppImage",
+        "category": "Utility"
+    },
+    "extends":null
+}

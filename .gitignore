@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+
+# Build outputs (do not commit; build on CI or locally before packaging)
+build/
+dist/
+
+# Environment and secrets (never commit)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Local database (optional: remove this line if you want to track DB in git)
+DB/
+*.db
+*.db-journal
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS and IDE
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local uploads (photos/documents stored on this machine)
+uploads/
+
+# Electron / auto-updater (publish outputs go to GitHub Releases, not git)
+# dist/ already above
+
+# Testing and coverage
+coverage/
+.nyc_output/
+
+# Prisma (generated client is in node_modules or committed; uncomment if you generate outside)
+# public/API/V1/electron/
+
+# Misc
+.cache/
+*.tgz
+
+#Output Folder
+out/
+

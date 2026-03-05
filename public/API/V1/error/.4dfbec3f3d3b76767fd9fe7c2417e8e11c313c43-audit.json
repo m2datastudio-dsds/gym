@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": false,
+        "amount": 30
+    },
+    "auditLog": "/home/m2data/Downloads/Gym-app/public/API/V1/error/.4dfbec3f3d3b76767fd9fe7c2417e8e11c313c43-audit.json",
+    "files": [
+        {
+            "date": 1732696346963,
+            "name": "/home/m2data/Downloads/Gym-app/public/API/V1/error/2024-11-27.log",
+            "hash": "d722446a32968b7f739f16b765c0d02c84603a24c1d36b31851567483934b308"
+        },
+        {
+            "date": 1732759580729,
+            "name": "/home/m2data/Downloads/Gym-app/public/API/V1/error/2024-11-28.log",
+            "hash": "4445e6011105b0d12c37788635955da5afaebb03de3bf15010dde7fe74ec63a6"
+        }
+    ],
+    "hashType": "sha256"
+}

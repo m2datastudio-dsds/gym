@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": false,
+        "amount": 30
+    },
+    "auditLog": "D:\\navarasu\\Gym-app\\public\\API\\V1\\debug\\.b5a59de7364c24fabebbf834652659a099f4e01e-audit.json",
+    "files": [
+        {
+            "date": 1729861966113,
+            "name": "D:\\navarasu\\Gym-app\\public\\API\\V1\\debug\\2024-10-25.log",
+            "hash": "f357fbbc21ce96df030a5630522a0f4b2e05340f10fcaa3979ad0b80d8cf201a"
+        },
+        {
+            "date": 1735292203666,
+            "name": "D:\\navarasu\\Gym-app\\public\\API\\V1\\debug\\2024-12-27.log",
+            "hash": "627bc6410ed12743613b8b8770c24d55dcb2ad27cc690f4310cbf5bfffc96326"
+        }
+    ],
+    "hashType": "sha256"
+}

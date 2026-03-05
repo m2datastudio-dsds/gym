@@ -1,0 +1,226 @@
+// schema.prisma
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../electron/client"
+  binaryTargets = ["native", "windows"]
+}
+
+model Staff {
+  id              Int       @id @default(autoincrement())
+  employeeCode    String    @unique
+  firstname       String
+  lastname        String?
+  email           String?   @unique
+  mobileNumber    String
+  alternateNumber String?
+  gender          String?
+  age             Int?
+  dateOfBirth     DateTime?
+  biometricId     String?
+  joiningDate     DateTime?
+  bloodGroup      String?
+  designation     String?
+  status          Boolean?
+  photoPicture    String?
+
+  permanentAddress     String
+  communicationAddress String
+}
+
+model Package {
+  id          Int      @id @default(autoincrement())
+  packageCode String   @unique
+  packageName String
+  month       Int
+  day         Int
+  amount      Float
+  active      Boolean
+  createdAt   DateTime @default(now())
+}
+
+model Member {
+  id                Int       @id @default(autoincrement())
+  memberID          String    @unique
+  firstName         String
+  lastName          String?
+  email             String?
+  mobileNumber      String
+  dateOfBirth       DateTime?
+  gender            String?
+  maritalStatus     String?
+  memberPhoto       String?
+  homeContactNumber String?
+  bloodGroup        String?
+  active            Boolean?
+  gstNumber         String?
+  remarks           String?
+  assignTrainer     String?
+  gstType           String?
+  packageType       String?
+  isMainPackage     Boolean?
+  packageAmount     Float?
+  gstamount         Float?
+  duration          String?
+  discount          Float?
+  paidAmount        Float?
+  paidDate          DateTime?
+  paymentMode       String?
+  receiptType       String?
+  startDate         DateTime?
+  fitnessDate       DateTime?
+  weight            Float?
+  height            Float?
+  neck              Float?
+  shoulders         Float?
+  chest             Float?
+  biceps            Float?
+  upperAbs          Float?
+  waist             Float?
+  lowerAbs          Float?
+  hip               Float?
+  thigh             Float?
+  calf              Float?
+  proofType         String?
+  proofNo           String?
+  expiryDate        DateTime?
+  proofDocument     String?
+  createdAt         DateTime  @default(now())
+
+  permanentAddress     String
+  communicationAddress String
+
+  @@index([email])
+  @@index([mobileNumber])
+}
+
+model Enquiry {
+  id                  Int       @id @default(autoincrement())
+  firstName           String
+  lastName            String?
+  mobileNumber        String
+  email               String?
+  alternateContact    String?
+  enquiryFor          String
+  status              String // Changed enum to String
+  howToKnowAboutUs    String
+  enquiryDate         DateTime
+  expectedJoiningDate DateTime?
+  followUpDate        DateTime
+  remarks             String?
+}
+
+model DietPlan {
+  id            Int      @id @default(autoincrement())
+  chartName     String
+  chartTable    String // Changed Json[] to String
+  file          String?
+  createdDate   DateTime @default(now())
+  assignedCount Int?     @default(0)
+  assign        String?
+}
+
+model ExercisePlan {
+  id          Int      @id @default(autoincrement())
+  planname    String
+  warmUp      String?
+  details     String // Changed Json[] to String
+  assign      String?
+  createdDate DateTime @default(now())
+  file        String?
+}
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  expenseDate DateTime
+  expenseType String
+  description String?
+  amount      Float
+  paymentMode String // Changed enum to String
+  remarks     String?
+  receiptFile String // Changed Json[] to String
+}
+
+model BusinessInfo {
+  id             Int       @id @default(autoincrement())
+  businessName   String
+  contactPerson  String
+  mobileNumber   String
+  email          String
+  businessLogo   String?
+  packageName    String?
+  paymentAmount  Float?
+  paidAmount     Float?
+  pendingAmount  Float?
+  expiryDate     DateTime?
+  address        String // Changed Json[] to String
+  district       String
+  state          String
+  pincode        String
+  configurations String // Changed Json[] to String
+}
+
+model Attendance {
+  id          Int       @id @default(autoincrement())
+  memberID    String
+  name        String
+  biometricID String?
+  joiningDate DateTime?
+  inTime      DateTime  @default(now())
+  outTime     String?
+  month       String
+}
+
+model StaffAttendance {
+  id           Int       @id @default(autoincrement())
+  employeeCode String
+  name         String
+  biometricID  String?
+  joiningDate  DateTime?
+  inTime       DateTime  @default(now())
+  outTime      String?
+  month        String
+}
+
+model Payment {
+  id            Int       @id @default(autoincrement())
+  paymentId     String
+  memberID      String
+  name          String
+  mobileNumber  String
+  packageType   String?
+  packageAmount Float?
+  paidAmount    Float?
+  pending       Float?
+  paidDate      DateTime?
+  paymentMode   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  @@index([paymentId])
+}
+
+model FileSyncQueue {
+  id           Int       @id @default(autoincrement())
+  localPath    String    @unique
+  remoteUrl    String?
+  fileType     String
+  entityType   String
+  entityId     Int
+  fieldName    String
+  status       String    @default("pending")
+  errorMessage String?
+  retryCount   Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  syncedAt     DateTime?
+
+  @@index([status])
+  @@index([entityType, entityId])
+}
