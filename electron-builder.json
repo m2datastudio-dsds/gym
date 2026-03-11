@@ -8,6 +8,7 @@
         "buildResources": "assets"
     },
     "extraMetadata": {
+        "main": "build/main.js",
         "environment": {
           "NODE_ENV": "production"
         }

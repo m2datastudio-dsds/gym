@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, Row, Col, Form, Divider, Space, Upload, TimePicker, notification } from 'antd';
+import { Button, Input, Row, Col, Form, Divider, Space, Upload, TimePicker, Modal, notification } from 'antd';
 import { PlusOutlined, MinusCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMediaQuery } from 'react-responsive';
 import { getDietplanbyId, updateDietPlan } from '../../Services/data.services';
 import moment from 'moment';
+import { toAbsoluteFileUrl } from '../../Utils/fileUrls';
 
 const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
   const [days, setDays] = useState([{ day: 'Day 1', items: [{}] }]);
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [fileList, setFileList] = useState([]);
-  const [isSticky, setIsSticky] = useState(false);
+  const [hasExistingFile, setHasExistingFile] = useState(false);
+  const [removeFile, setRemoveFile] = useState(false);
+  const [filePreviewUrl, setFilePreviewUrl] = useState(null);
+  const [filePreviewVisible, setFilePreviewVisible] = useState(false);
 
   const isSmallScreen = useMediaQuery({ query: '(max-width: 576px)' });
 
@@ -29,7 +33,8 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
             day: `Day ${index + 1}`,
             items: day.meals.map((meal) => ({
               Food: meal.Food,
-              Time: meal.Time ? moment(meal.Time, 'HH:mm A') : null,
+              // Parse using the same 12-hr format we store ('hh:mm A')
+              Time: meal.Time && String(meal.Time).trim() ? moment(meal.Time, 'hh:mm A') : null,
               Calorie: meal.Calorie,
               Quantity: meal.Quantity,
               VideoLink: meal.VideoLink,
@@ -46,14 +51,21 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
   
         // Set the uploaded file list if the diet plan has a file
         if (dietPlan.file) {
+          const resolvedFileUrl = toAbsoluteFileUrl(dietPlan.file);
+          setHasExistingFile(true);
+          setRemoveFile(false);
           setFileList([
             {
               uid: '-1',
               name: dietPlan.file.split('/').pop(),
               status: 'done',
-              url: dietPlan.file,
+              url: resolvedFileUrl,
             },
           ]);
+        } else {
+          setHasExistingFile(false);
+          setRemoveFile(false);
+          setFileList([]);
         }
       } catch (error) {
         notification.error({
@@ -102,6 +114,39 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
 
   const handleFileChange = (info) => {
     setFileList(info.fileList);
+    if (info.fileList.length === 0) {
+      setRemoveFile(hasExistingFile);
+      return;
+    }
+
+    if (info.fileList[0]?.originFileObj) {
+      setRemoveFile(false);
+    }
+  };
+
+  const handleFilePreview = (file) => {
+    const rawUrl = file?.url || file?.thumbUrl;
+    const resolvedUrl = toAbsoluteFileUrl(rawUrl);
+    if (!resolvedUrl) return;
+    setFilePreviewUrl(resolvedUrl);
+    setFilePreviewVisible(true);
+  };
+
+  const validatePlanFile = (file) => {
+    const ext = String(file?.name || '').toLowerCase().split('.').pop();
+    const allowedExt = new Set(['jpg', 'jpeg', 'pdf']);
+    const allowedMime = new Set(['image/jpeg', 'application/pdf']);
+    const isAllowed = allowedExt.has(ext) || allowedMime.has(file?.type);
+
+    if (!isAllowed) {
+      notification.error({
+        message: 'Invalid file',
+        description: 'Only JPG/JPEG images and PDF files are allowed.',
+      });
+      return Upload.LIST_IGNORE;
+    }
+
+    return false;
   };
 
   const handleSubmit = async (values) => {
@@ -113,21 +158,25 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
     formData.append('assign', values.assign || '');
 
     // Append file if uploaded
-    if (fileList.length > 0) {
+    if (fileList.length > 0 && fileList[0].originFileObj) {
       formData.append('file', fileList[0].originFileObj);
     }
+    if (removeFile) {
+      formData.append('removeFile', 'true');
+    }
 
-    // Append chart table data
-    days.forEach((day, dayIndex) => {
-      formData.append(`chartTable[${dayIndex}][day]`, day.day);
-      day.items.forEach((item, itemIndex) => {
-        formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Time]`, item.Time ? item.Time.format('HH:mm A') : '');
-        formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Food]`, item.Food || '');
-        formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Quantity]`, item.Quantity || '');
-        formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Calorie]`, item.Calorie || '');
-        formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][VideoLink]`, item.VideoLink || '');
-      });
-    });
+    // Build chartTable as array so backend receives it correctly (multipart form doesn't nest arrays)
+    const chartTable = days.map((day) => ({
+      day: day.day,
+      meals: day.items.map((item) => ({
+        Time: item.Time ? item.Time.format('hh:mm A') : '',
+        Food: item.Food || '',
+        Quantity: item.Quantity || '',
+        Calorie: item.Calorie || '',
+        VideoLink: item.VideoLink || '',
+      })),
+    }));
+    formData.append('chartTable', JSON.stringify(chartTable));
 
     setLoading(true);
     try {
@@ -177,7 +226,7 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
 
         <h3 style={{ marginTop: '20px', marginBottom: '10px', fontWeight: 'bold' }}>Chart Table</h3>
 
-        <div className={`add-day-button-container ${isSticky ? 'sticky' : ''}`}>
+        <div className="add-day-button-container">
           <Button
             type="dashed"
             onClick={addDay}
@@ -203,6 +252,10 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
                       style={{ width: '100%' }}
                       value={item.Time}
                       onChange={(value) => handleInputChange(dayIndex, itemIndex, 'Time', value)}
+                      // UI stability: avoid accidental changes while scrolling/moving to OK (supported in newer AntD; ignored otherwise)
+                      changeOnScroll={false}
+                      needConfirm
+                      inputReadOnly
                     />
                   </Form.Item>
                 </Col>
@@ -259,16 +312,35 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
           </div>
         ))}
 
-        <Form.Item label="Upload Plan">
+        <Form.Item label="Upload Plan" extra="One file per plan. JPG/JPEG or PDF only. Re-upload to replace.">
           <Upload
             fileList={fileList}
             onChange={handleFileChange}
-            beforeUpload={() => false}
+            beforeUpload={validatePlanFile}
             listType="picture"
+            onPreview={handleFilePreview}
+            maxCount={1}
+            accept=".jpg,.jpeg,.pdf"
           >
             <Button icon={<UploadOutlined />}>Choose File</Button>
           </Upload>
         </Form.Item>
+
+        <Modal
+          title="Plan File"
+          open={filePreviewVisible}
+          onCancel={() => { setFilePreviewVisible(false); setFilePreviewUrl(null); }}
+          footer={null}
+          width={800}
+          destroyOnClose
+          styles={{ body: { minHeight: 400, display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f0f0f0' } }}
+        >
+          {filePreviewUrl && (
+            String(filePreviewUrl).toLowerCase().split('?')[0].endsWith('.pdf')
+              ? <iframe src={filePreviewUrl} title="Plan File" style={{ width: '100%', height: 500, border: 'none' }} />
+              : <img src={filePreviewUrl} alt="Plan" style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }} />
+          )}
+        </Modal>
 
         <Form.Item>
           <Button type="primary" htmlType="submit" loading={loading} style={{ marginRight: '10px' }}>
@@ -281,14 +353,11 @@ const EditDietPlan = ({ onBack, dietPlanId, onSaveSuccess }) => {
       <style jsx>{`
         .add-day-button-container {
           margin-top: 20px;
-          position: relative;
-        }
-
-        .add-day-button-container.sticky {
-          position: fixed;
-          bottom: 10px;
-          z-index: 1000;
-          transition: opacity 0.3s;
+          position: sticky;
+          top: 12px;
+          z-index: 10;
+          background: transparent;
+          padding: 0;
         }
       `}</style>
     </div>

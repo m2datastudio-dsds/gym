@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Input, Button, Row, Col, Typography, Popconfirm, Space, Drawer, notification } from 'antd';
+import { Table, Input, Button, Row, Col, Typography, Popconfirm, Space, Drawer, Modal, notification } from 'antd';
 import { SearchOutlined, CloseCircleOutlined, EditOutlined, DeleteOutlined, EyeFilled } from '@ant-design/icons';
 import { FaPlus } from 'react-icons/fa';
 import { useMediaQuery } from 'react-responsive';
@@ -7,6 +7,7 @@ import moment from 'moment';
 import AddDietPlan from './AddDietPlan';
 import EditDietPlan from './EditDietPlan';
 import { getallDietPlans, deleteDietPlan } from '../../Services/data.services';
+import { toAbsoluteFileUrl } from '../../Utils/fileUrls';
 
 const { Title } = Typography;
 
@@ -19,6 +20,8 @@ const DietList = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [selectedDietPlan, setSelectedDietPlan] = useState(null);
   const [selectedDietPlanId, setSelectedDietPlanId] = useState(null);
+  const [filePreviewUrl, setFilePreviewUrl] = useState(null);
+  const [filePreviewVisible, setFilePreviewVisible] = useState(false);
 
   // Media queries for responsiveness
   const isSmallScreen = useMediaQuery({ query: '(max-width: 576px)' });
@@ -110,40 +113,12 @@ const DietList = () => {
     setDrawerVisible(true);
   };
 
-  // Function to open file in a new tab
+  // In-app viewer so plan file opens inside the app (works in browser and Electron .exe)
   const handleOpenFile = (fileUrl) => {
-    const newWindow = window.open();
-
-    const imageWidth = '800px';
-    const imageHeight = '600px';
-
-    newWindow.document.write(`
-      <html>
-        <head>
-          <title>Plan File</title>
-          <style>
-            body {
-              margin: 0;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              height: 100vh;
-              background-color: #f0f0f0;
-            }
-            img {
-              max-width: ${imageWidth};
-              max-height: ${imageHeight};
-              object-fit: contain;
-              box-shadow: 0px 0px 15px rgba(0,0,0,0.1);
-            }
-          </style>
-        </head>
-        <body>
-          <img src="${fileUrl}" alt="Plan Image" />
-        </body>
-      </html>
-    `);
-    newWindow.document.close();
+    const resolvedUrl = toAbsoluteFileUrl(fileUrl);
+    if (!resolvedUrl) return;
+    setFilePreviewUrl(resolvedUrl);
+    setFilePreviewVisible(true);
   };
 
   // Pagination configuration
@@ -347,6 +322,23 @@ const DietList = () => {
           </div>
         )}
       </Drawer>
+
+      {/* In-app plan file viewer (works in browser and Electron .exe) */}
+      <Modal
+        title="Plan File"
+        open={filePreviewVisible}
+        onCancel={() => { setFilePreviewVisible(false); setFilePreviewUrl(null); }}
+        footer={null}
+        width={800}
+        destroyOnClose
+        styles={{ body: { minHeight: 400, display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f0f0f0' } }}
+      >
+        {filePreviewUrl && (
+          String(filePreviewUrl).toLowerCase().split('?')[0].endsWith('.pdf')
+            ? <iframe src={filePreviewUrl} title="Plan File" style={{ width: '100%', height: 500, border: 'none' }} />
+            : <img src={filePreviewUrl} alt="Plan" style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }} />
+        )}
+      </Modal>
 
       {/* Conditional Rendering for Add and Edit Diet Plan Components */}
       {view === 'adddietplan' && <AddDietPlan onBack={handleBackClick} onSaveSuccess={fetchDietPlans} />}

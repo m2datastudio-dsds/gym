@@ -16,6 +16,7 @@ import { UploadOutlined, CameraOutlined } from '@ant-design/icons';
 import { getExpensebyId, updateExpense } from '../../Services/data.services';
 import moment from 'moment';
 import Webcam from 'react-webcam';
+import { normalizeFileUrlList, toAbsoluteFileUrl } from '../../Utils/fileUrls';
 
 const { Option } = Select;
 
@@ -25,7 +26,16 @@ const EditExpense = ({ onBack, expenseId }) => {
   const [loading, setLoading] = useState(false);
   const [previewImage, setPreviewImage] = useState('');
   const [webcamVisible, setWebcamVisible] = useState(false);
+  const [webcamReady, setWebcamReady] = useState(false);
   const webcamRef = useRef(null);
+
+  useEffect(() => {
+    if (webcamVisible) {
+      const t = setTimeout(() => setWebcamReady(true), 350);
+      return () => clearTimeout(t);
+    }
+    setWebcamReady(false);
+  }, [webcamVisible]);
 
   useEffect(() => {
     const fetchExpense = async () => {
@@ -44,7 +54,8 @@ const EditExpense = ({ onBack, expenseId }) => {
         });
 
         // Set file list for receipt images
-        const receiptFiles = JSON.parse(expense.receiptFile).map((url, index) => ({
+        const receiptUrls = normalizeFileUrlList(expense.receiptFile);
+        const receiptFiles = receiptUrls.map((url, index) => ({
           uid: `file-${index}`,
           name: `Receipt_${index + 1}`,
           thumbUrl: url,
@@ -83,9 +94,16 @@ const EditExpense = ({ onBack, expenseId }) => {
       updatedExpense.append('paymentMode', values.paymentMode);
       updatedExpense.append('remarks', values.remarks || '');
 
-      // Append receipt files to FormData
+      const existingKeptUrls = fileList
+        .filter((f) => !f.originFileObj)
+        .map((f) => toAbsoluteFileUrl(f.url || f.thumbUrl))
+        .filter(Boolean);
+      updatedExpense.append('existingReceiptUrls', JSON.stringify(existingKeptUrls));
+
       fileList.forEach((file) => {
-        updatedExpense.append('receiptFile', file.url || file.thumbUrl);
+        if (file.originFileObj) {
+          updatedExpense.append('receiptFile', file.originFileObj);
+        }
       });
 
       // Call the updateExpense API with the expense ID
@@ -105,12 +123,17 @@ const EditExpense = ({ onBack, expenseId }) => {
     }
   };
 
-  const handleUpload = ({ file, fileList }) => {
-    if (fileList.length > 5) {
-      message.error('You can only upload up to 5 images.');
-      return;
-    }
-    setFileList(fileList);
+  const handleUpload = ({ file, fileList: newList }) => {
+    setFileList((prev) => {
+      const existingFromServer = prev.filter((f) => !f.originFileObj);
+      const newFiles = newList.filter((f) => f.originFileObj);
+      const merged = [...existingFromServer, ...newFiles];
+      if (merged.length > 5) {
+        message.error('You can only upload up to 5 images.');
+        return prev;
+      }
+      return merged;
+    });
   };
 
   const handleRemove = (file) => {
@@ -118,24 +141,45 @@ const EditExpense = ({ onBack, expenseId }) => {
   };
 
   const handlePreview = (file) => {
-    setPreviewImage(file.thumbUrl || file.url);
+    setPreviewImage(toAbsoluteFileUrl(file.thumbUrl || file.url));
     Modal.info({
       title: 'Image Preview',
-      content: <img src={file.thumbUrl || file.url} alt="Preview" style={{ width: '100%' }} />,
+      content: <img src={toAbsoluteFileUrl(file.thumbUrl || file.url)} alt="Preview" style={{ width: '100%' }} />,
       onOk: () => setPreviewImage(''),
     });
+  };
+
+  const dataURItoBlob = (dataURI) => {
+    const byteString = atob(dataURI.split(',')[1]);
+    const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    return new Blob([ab], { type: mimeString });
   };
 
   const captureImage = () => {
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
-      const newFile = {
-        uid: `file-${fileList.length}`,
-        name: `Captured_Image_${fileList.length + 1}.png`,
-        thumbUrl: imageSrc,
-        url: imageSrc,
-      };
-      setFileList((prevList) => [...prevList, newFile]);
+      setFileList((prevList) => {
+        if (prevList.length >= 5) {
+          message.error('You can only have up to 5 receipt images.');
+          return prevList;
+        }
+        const blob = dataURItoBlob(imageSrc);
+        const newFile = {
+          uid: `capture-${Date.now()}`,
+          name: `Captured_Image_${prevList.length + 1}.png`,
+          thumbUrl: imageSrc,
+          url: imageSrc,
+          originFileObj: blob,
+          size: blob.size,
+          type: blob.type,
+        };
+        return [...prevList, newFile];
+      });
       closeWebcam();
     }
   };
@@ -269,14 +313,22 @@ const EditExpense = ({ onBack, expenseId }) => {
           centered
           width={600}
         >
-          <Webcam
-            audio={false}
-            ref={webcamRef}
-            screenshotFormat="image/png"
-            width="100%"
-          />
+          {!webcamReady ? (
+            <div style={{ minHeight: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', color: '#fff' }}>
+              Starting camera…
+            </div>
+          ) : (
+            <Webcam
+              key="edit-expense-webcam"
+              audio={false}
+              ref={webcamRef}
+              screenshotFormat="image/png"
+              width="100%"
+              videoConstraints={{ width: 640, height: 480, facingMode: 'user' }}
+            />
+          )}
           <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
-            <Button type="primary" onClick={captureImage}>
+            <Button type="primary" onClick={captureImage} disabled={!webcamReady}>
               Capture
             </Button>
             <Button onClick={closeWebcam}>

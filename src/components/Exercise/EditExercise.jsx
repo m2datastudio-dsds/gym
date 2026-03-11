@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Input, Row, Col, Form, Divider, Space, Upload, notification } from 'antd';
+import { Button, Input, Row, Col, Form, Divider, Space, Upload, Modal, notification } from 'antd';
 import { PlusOutlined, MinusCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import { useMediaQuery } from 'react-responsive';
 import { v4 as uuidv4 } from 'uuid';
 import { getExerciseplanbyId, updateExercisePlan } from '../../Services/data.services';
+import { toAbsoluteFileUrl } from '../../Utils/fileUrls';
 
 const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
   const [form] = Form.useForm();
   const [days, setDays] = useState([]);
   const [fileList, setFileList] = useState([]);
-  const [isSticky, setIsSticky] = useState(false);
+  const [hasExistingFile, setHasExistingFile] = useState(false);
+  const [removeFile, setRemoveFile] = useState(false);
+  const [filePreviewUrl, setFilePreviewUrl] = useState(null);
+  const [filePreviewVisible, setFilePreviewVisible] = useState(false);
 
   // Media queries for responsiveness
   const isSmallScreen = useMediaQuery({ query: '(max-width: 576px)' });
@@ -49,6 +53,24 @@ const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
           }));
 
           setDays(mappedDays);
+
+          // Show existing plan file in Upload so user sees current file; backend keeps it if no new file is sent
+          if (plan.file) {
+            const resolvedFileUrl = toAbsoluteFileUrl(plan.file);
+            setHasExistingFile(true);
+            setRemoveFile(false);
+            setFileList([{
+              uid: '-existing',
+              name: 'Current plan file',
+              url: resolvedFileUrl,
+              thumbUrl: resolvedFileUrl,
+              status: 'done',
+            }]);
+          } else {
+            setHasExistingFile(false);
+            setRemoveFile(false);
+            setFileList([]);
+          }
         } else {
           notification.error({
             message: 'Error',
@@ -92,29 +114,49 @@ const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
     setDays(newDays);
   };
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 50) {
-        setIsSticky(true);
-      } else {
-        setIsSticky(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
   const handleInputChange = (dayIndex, itemIndex, field, value) => {
     const newDays = [...days];
     newDays[dayIndex].items[itemIndex][field] = value;
     setDays(newDays);
   };
 
+  const validatePlanFile = (file) => {
+    const ext = String(file?.name || '').toLowerCase().split('.').pop();
+    const allowedExt = new Set(['jpg', 'jpeg', 'pdf']);
+    const allowedMime = new Set(['image/jpeg', 'application/pdf']);
+    const isAllowed = allowedExt.has(ext) || allowedMime.has(file?.type);
+
+    if (!isAllowed) {
+      notification.error({
+        message: 'Invalid file',
+        description: 'Only JPG/JPEG images and PDF files are allowed.',
+      });
+      return Upload.LIST_IGNORE;
+    }
+
+    return false; // prevent auto-upload; keep file in list
+  };
+
   const handleFileChange = (info) => {
     setFileList(info.fileList);
+    if (info.fileList.length === 0) {
+      // user removed the existing file and didn't pick a new one
+      setRemoveFile(hasExistingFile);
+      return;
+    }
+
+    // user picked a new file (replace), or re-added after removing
+    if (info.fileList[0]?.originFileObj) {
+      setRemoveFile(false);
+    }
+  };
+
+  const handleFilePreview = (file) => {
+    const rawUrl = file?.url || file?.thumbUrl;
+    const resolvedUrl = toAbsoluteFileUrl(rawUrl);
+    if (!resolvedUrl) return;
+    setFilePreviewUrl(resolvedUrl);
+    setFilePreviewVisible(true);
   };
 
   const handleSave = async () => {
@@ -125,8 +167,12 @@ const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
       formData.append('planname', values.planname);
       formData.append('assign', values.assign || '');
 
-      if (fileList.length > 0) {
+      // Only send a new file when user selected one; otherwise backend keeps existing plan file
+      if (fileList.length > 0 && fileList[0].originFileObj) {
         formData.append('file', fileList[0].originFileObj);
+      }
+      if (removeFile) {
+        formData.append('removeFile', 'true');
       }
 
       const detailsArray = days.map((day) => ({
@@ -183,7 +229,7 @@ const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
 
         <h3 style={{ marginTop: '20px', marginBottom: '10px', fontWeight: 'bold' }}>Exercise Details</h3>
 
-        <div className={`add-day-button-container ${isSticky ? 'sticky' : ''}`}>
+        <div className="add-day-button-container">
           <Button type="dashed" onClick={() => addDay()} icon={<PlusOutlined />} style={{ width: '120px', textAlign: 'center' }}>
             Add Day
           </Button>
@@ -224,11 +270,35 @@ const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
           </div>
         ))}
 
-        <Form.Item label="Upload Plan">
-          <Upload fileList={fileList} onChange={handleFileChange} beforeUpload={() => false}>
+        <Form.Item label="Upload Plan" extra="One file per plan. JPG/JPEG or PDF only. Re-upload to replace.">
+          <Upload
+            fileList={fileList}
+            onChange={handleFileChange}
+            onPreview={handleFilePreview}
+            beforeUpload={validatePlanFile}
+            maxCount={1}
+            listType="picture"
+            accept=".jpg,.jpeg,.pdf"
+          >
             <Button icon={<UploadOutlined />}>Choose File</Button>
           </Upload>
         </Form.Item>
+
+        <Modal
+          title="Plan File"
+          open={filePreviewVisible}
+          onCancel={() => { setFilePreviewVisible(false); setFilePreviewUrl(null); }}
+          footer={null}
+          width={800}
+          destroyOnClose
+          styles={{ body: { minHeight: 400, display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f0f0f0' } }}
+        >
+          {filePreviewUrl && (
+            String(filePreviewUrl).toLowerCase().split('?')[0].endsWith('.pdf')
+              ? <iframe src={filePreviewUrl} title="Plan File" style={{ width: '100%', height: 500, border: 'none' }} />
+              : <img src={filePreviewUrl} alt="Plan" style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }} />
+          )}
+        </Modal>
 
         <Form.Item>
           <Button type="primary" onClick={handleSave} style={{ marginRight: '10px' }}>Update</Button>
@@ -239,13 +309,11 @@ const EditExercise = ({ exercisePlanId, onBack, onSaveSuccess }) => {
       <style jsx>{`
         .add-day-button-container {
           margin-top: 20px;
-          position: relative;
-        }
-        .add-day-button-container.sticky {
-          position: fixed;
-          bottom: 20px;
-          z-index: 1000;
-          transition: opacity 0.3s;
+          position: sticky;
+          top: 12px;
+          z-index: 10;
+          background: transparent;
+          padding: 0;
         }
       `}</style>
     </div>

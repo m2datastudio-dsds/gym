@@ -8,7 +8,6 @@ import { saveExercisePlan } from '../../Services/data.services'; // Assuming you
 const AddExercise = ({ onBack, onSaveSuccess }) => {
   const [form] = Form.useForm();
   const [days, setDays] = useState([{ id: uuidv4(), day: 'Day 1', items: [{ id: uuidv4() }] }]);
-  const [isSticky, setIsSticky] = useState(false);
   const [fileList, setFileList] = useState([]); // Manage file list for upload
 
   // Media queries for responsiveness
@@ -48,25 +47,29 @@ const AddExercise = ({ onBack, onSaveSuccess }) => {
     setDays(newDays);
   };
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 50) {
-        setIsSticky(true);
-      } else {
-        setIsSticky(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
+  // Note: Add Day button uses CSS sticky (no scroll listeners needed)
 
   const handleInputChange = (dayIndex, itemIndex, field, value) => {
     const newDays = [...days];
     newDays[dayIndex].items[itemIndex][field] = value;
     setDays(newDays);
+  };
+
+  const validatePlanFile = (file) => {
+    const ext = String(file?.name || '').toLowerCase().split('.').pop();
+    const allowedExt = new Set(['jpg', 'jpeg', 'pdf']);
+    const allowedMime = new Set(['image/jpeg', 'application/pdf']);
+    const isAllowed = allowedExt.has(ext) || allowedMime.has(file?.type);
+
+    if (!isAllowed) {
+      notification.error({
+        message: 'Invalid file',
+        description: 'Only JPG/JPEG images and PDF files are allowed.',
+      });
+      return Upload.LIST_IGNORE;
+    }
+
+    return false;
   };
 
   const handleFileChange = (info) => {
@@ -81,7 +84,7 @@ const AddExercise = ({ onBack, onSaveSuccess }) => {
       formData.append('planname', values.planname);
       formData.append('assign', values.assign || '');
   
-      if (fileList.length > 0) {
+      if (fileList.length > 0 && fileList[0].originFileObj) {
         formData.append('file', fileList[0].originFileObj);
       }
   
@@ -142,7 +145,7 @@ const AddExercise = ({ onBack, onSaveSuccess }) => {
 
         <h3 style={{ marginTop: '20px', marginBottom: '10px', fontWeight: 'bold' }}>Exercise Details</h3>
 
-        <div className={`add-day-button-container ${isSticky ? 'sticky' : ''}`}>
+        <div className="add-day-button-container">
           <Button type="dashed" onClick={() => addDay()} icon={<PlusOutlined />} style={{ width: '120px', textAlign: 'center' }}>
             Add Day
           </Button>
@@ -183,8 +186,14 @@ const AddExercise = ({ onBack, onSaveSuccess }) => {
           </div>
         ))}
 
-        <Form.Item label="Upload Plan">
-          <Upload fileList={fileList} onChange={handleFileChange} beforeUpload={() => false}>
+        <Form.Item label="Upload Plan" extra="One file per plan. JPG/JPEG or PDF only.">
+          <Upload
+            fileList={fileList}
+            onChange={handleFileChange}
+            beforeUpload={validatePlanFile}
+            maxCount={1}
+            accept=".jpg,.jpeg,.pdf"
+          >
             <Button icon={<UploadOutlined />}>Choose File</Button>
           </Upload>
         </Form.Item>
@@ -198,13 +207,11 @@ const AddExercise = ({ onBack, onSaveSuccess }) => {
       <style jsx>{`
         .add-day-button-container {
           margin-top: 20px;
-          position: relative;
-        }
-        .add-day-button-container.sticky {
-          position: fixed;
-          bottom: 20px;
-          z-index: 1000;
-          transition: opacity 0.3s;
+          position: sticky;
+          top: 12px;
+          z-index: 10;
+          background: transparent;
+          padding: 0;
         }
       `}</style>
     </div>

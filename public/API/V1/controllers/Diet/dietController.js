@@ -7,11 +7,62 @@ const FileSyncService = require('../../services/fileSyncService');
 
 class DietController { 
 
+    static parseChartTableFromBody(body) {
+        // Preferred: chartTable sent as JSON string (FormData-safe)
+        let chartTable = body?.chartTable;
+        if (typeof chartTable === 'string') {
+            try {
+                const parsed = JSON.parse(chartTable);
+                if (Array.isArray(parsed)) return parsed;
+            } catch {
+                // fall through to bracket-notation parsing
+            }
+        }
+        if (Array.isArray(chartTable)) return chartTable;
+
+        // Fallback: bracket-notation fields (may happen with some clients)
+        // Example keys:
+        // - chartTable[0][day]
+        // - chartTable[0][meals][1][Time]
+        const days = new Map(); // dayIndex -> { day, meals: Map(mealIndex -> mealObj) }
+        for (const [key, value] of Object.entries(body || {})) {
+            const dayMatch = key.match(/^chartTable\[(\d+)\]\[day\]$/);
+            if (dayMatch) {
+                const dIdx = Number(dayMatch[1]);
+                if (!days.has(dIdx)) days.set(dIdx, { day: '', meals: new Map() });
+                days.get(dIdx).day = value;
+                continue;
+            }
+
+            const mealMatch = key.match(/^chartTable\[(\d+)\]\[meals\]\[(\d+)\]\[([A-Za-z]+)\]$/);
+            if (mealMatch) {
+                const dIdx = Number(mealMatch[1]);
+                const mIdx = Number(mealMatch[2]);
+                const field = mealMatch[3];
+                if (!days.has(dIdx)) days.set(dIdx, { day: '', meals: new Map() });
+                const day = days.get(dIdx);
+                if (!day.meals.has(mIdx)) day.meals.set(mIdx, {});
+                day.meals.get(mIdx)[field] = value;
+            }
+        }
+
+        if (days.size === 0) return null;
+
+        return Array.from(days.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([, d]) => ({
+                day: d.day,
+                meals: Array.from(d.meals.entries())
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([, meal]) => meal),
+            }));
+    }
+
     static async saveDietPlan(req, res) {
         try {
-            const { chartName, chartTable, assignedCount, assignTo } = req.body;
-            console.log('Request', req.body);
-    
+            const { chartName, assignedCount, assignTo } = req.body;
+            const chartTable = DietController.parseChartTableFromBody(req.body);
+
             // Validate required fields
             if (!chartName || !chartTable || !Array.isArray(chartTable) || chartTable.length === 0) {
                 return res.status(StatusCodes.BAD_REQUEST).json({
@@ -19,7 +70,7 @@ class DietController {
                     message: 'Chart Name and Chart Table (with at least one entry) are required.',
                 });
             }
-    
+
             // Validate the chartTable structure for each day
             for (const day of chartTable) {
                 if (!day.day || !Array.isArray(day.meals) || day.meals.length === 0) {
@@ -30,10 +81,10 @@ class DietController {
                 }
                 for (const meal of day.meals) {
                     const { Time, Food, Quantity, Calorie } = meal;
-                    if (!Time || !Food || !Quantity || !Calorie) {
+                    if (!Food || !Quantity || !Calorie) {
                         return res.status(StatusCodes.BAD_REQUEST).json({
                             code: StatusCodes.BAD_REQUEST,
-                            message: 'Each meal must have Time, Food, Quantity and Calorie.',
+                            message: 'Each meal must have Food, Quantity and Calorie.',
                         });
                     }
                 }
@@ -86,8 +137,9 @@ class DietController {
     static async updateDietPlan(req, res) {
         try {
             const { id } = req.params;
-            const { chartName, chartTable, assign, assignedCount } = req.body;
-    
+            const { chartName, assign, assignedCount, removeFile } = req.body;
+            const chartTable = DietController.parseChartTableFromBody(req.body);
+
             // Validate ID
             if (!id) {
                 return res.status(StatusCodes.BAD_REQUEST).json({
@@ -95,7 +147,7 @@ class DietController {
                     message: 'Diet plan ID is required.',
                 });
             }
-    
+
             // Validate required fields
             if (!chartName || !chartTable || !Array.isArray(chartTable) || chartTable.length === 0) {
                 return res.status(StatusCodes.BAD_REQUEST).json({
@@ -103,7 +155,7 @@ class DietController {
                     message: 'Chart Name and Chart Table (with at least one entry) are required.',
                 });
             }
-    
+
             // Validate the chartTable structure for each day
             for (const day of chartTable) {
                 if (!day.day || !Array.isArray(day.meals) || day.meals.length === 0) {
@@ -114,10 +166,10 @@ class DietController {
                 }
                 for (const meal of day.meals) {
                     const { Time, Food, Quantity, Calorie } = meal;
-                    if (!Time || !Food || !Quantity || !Calorie ) {
+                    if (!Food || !Quantity || !Calorie) {
                         return res.status(StatusCodes.BAD_REQUEST).json({
                             code: StatusCodes.BAD_REQUEST,
-                            message: 'Each meal must have Time, Food, Quantity and Calorie.',
+                            message: 'Each meal must have Food, Quantity and Calorie.',
                         });
                     }
                 }
@@ -146,6 +198,8 @@ class DietController {
                     entityId: parseInt(id, 10),
                     fieldName: 'file',
                 }).catch(() => {});
+            } else if (String(removeFile).toLowerCase() === 'true') {
+                uploadedFileLocation = null;
             }
     
             // Convert chartTable to the desired format

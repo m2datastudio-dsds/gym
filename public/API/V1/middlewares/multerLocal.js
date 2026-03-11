@@ -69,6 +69,7 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
     const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     const allowedDocTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+    const allowedPlanFileTypes = ['application/pdf', 'image/jpeg', 'image/jpg'];
     
     if (file.fieldname === 'memberPhoto' || file.fieldname === 'photoPicture') {
         if (allowedImageTypes.includes(file.mimetype)) {
@@ -81,6 +82,13 @@ const fileFilter = (req, file, cb) => {
             cb(null, true);
         } else {
             cb(new Error('Only PDF and image files are allowed for documents'), false);
+        }
+    } else if (file.fieldname === 'file') {
+        // Diet/Exercise plan file: restrict to PDF or JPG/JPEG only
+        if (allowedPlanFileTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only PDF and JPG/JPEG files are allowed for plan uploads'), false);
         }
     } else {
         cb(null, true);

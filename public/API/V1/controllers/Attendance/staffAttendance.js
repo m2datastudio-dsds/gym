@@ -134,7 +134,13 @@ class StaffAttendanceController {
             const staffList = await prisma.staff.findMany();
             const attendanceList = await prisma.staffAttendance.findMany();
             const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
-    
+
+            for (const staff of staffList) {
+                if (staff.photoPicture) {
+                    await FileSyncService.ensureEntityFiles('staff', staff.id);
+                }
+            }
+
             // Initialize an object to store attendance count for each staff member per month
             const attendanceCountByStaffAndMonth = {};
     
@@ -304,8 +310,10 @@ class StaffAttendanceController {
                 attendanceCount = attendanceRecords.length;
             }
     
-            // Convert local photo path to API URL
             const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+            if (staff.photoPicture) {
+                await FileSyncService.ensureEntityFiles('staff', staff.id);
+            }
             const photoPicture = staff.photoPicture 
                 ? FileSyncService.convertToApiUrl(staff.photoPicture, apiBaseUrl)
                 : null;

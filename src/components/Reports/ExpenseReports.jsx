@@ -4,6 +4,7 @@ import { SearchOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { FaCircleArrowLeft, FaCircleArrowRight } from "react-icons/fa6";
 import { getallExpenses } from '../../Services/data.services';
 import moment from 'moment';
+import { normalizeFileUrlList } from '../../Utils/fileUrls';
 
 const { Title } = Typography;
 
@@ -127,7 +128,7 @@ const ExpenseReports = ({ goToReports }) => {
           dataIndex="receiptFile"
           key="receiptFile"
           render={(receiptFile) => {
-            const files = JSON.parse(receiptFile);
+            const files = normalizeFileUrlList(receiptFile);
             return files.map((file, index) => (
               <Tag color="blue" key={index}>
                 <a onClick={() => openModal(files, index)}>

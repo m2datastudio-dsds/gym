@@ -215,8 +215,23 @@ const ExpensesList = () => {
         </>
       )}
 
-      {view === 'addexpense' && <AddExpense onBack={() => setView('expenseslist')} />}
-      {view === 'editexpense' && <EditExpense onBack={() => setView('expenseslist')} expenseId={selectedExpenseId} />}
+      {view === 'addexpense' && (
+        <AddExpense
+          onBack={() => {
+            setView('expenseslist');
+            fetchExpenses();
+          }}
+        />
+      )}
+      {view === 'editexpense' && (
+        <EditExpense
+          onBack={() => {
+            setView('expenseslist');
+            fetchExpenses();
+          }}
+          expenseId={selectedExpenseId}
+        />
+      )}
     </div>
   );
 };

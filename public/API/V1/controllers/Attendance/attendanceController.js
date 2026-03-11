@@ -198,6 +198,12 @@ class AttendanceController {
             const attendanceRecords = await prisma.attendance.findMany();
             const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
 
+            for (const member of members) {
+                if (member.memberPhoto) {
+                    await FileSyncService.ensureEntityFiles('member', member.id);
+                }
+            }
+
             const attendanceCountByMemberAndMonth = {};
             attendanceRecords.forEach(att => {
                 const memberID = att.memberID;
@@ -376,8 +382,10 @@ class AttendanceController {
                 ? calculateEndDate(member.startDate, member.duration)
                 : 'N/A';
 
-            // Convert local photo path to API URL
             const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+            if (member.memberPhoto) {
+                await FileSyncService.ensureEntityFiles('member', member.id);
+            }
             const memberPhoto = member.memberPhoto 
                 ? FileSyncService.convertToApiUrl(member.memberPhoto, apiBaseUrl)
                 : null;

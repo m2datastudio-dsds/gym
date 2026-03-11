@@ -9,7 +9,6 @@ import { saveDietPlan } from '../../Services/data.services'; // Assuming you hav
 const AddDietPlan = ({ onBack, onSaveSuccess }) => {
   const [form] = Form.useForm();
   const [days, setDays] = useState([{ id: uuidv4(), day: 'Day 1', items: [{ id: uuidv4() }] }]);
-  const [isSticky, setIsSticky] = useState(false);
   const [fileList, setFileList] = useState([]); // Manage file list for upload
 
   // Media queries for responsiveness
@@ -49,25 +48,29 @@ const AddDietPlan = ({ onBack, onSaveSuccess }) => {
     setDays(newDays);
   };
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 50) {
-        setIsSticky(true);
-      } else {
-        setIsSticky(false);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
+  // Note: Add Day button uses CSS sticky (no scroll listeners needed)
 
   const handleInputChange = (dayIndex, itemIndex, field, value) => {
     const newDays = [...days];
     newDays[dayIndex].items[itemIndex][field] = value;
     setDays(newDays);
+  };
+
+  const validatePlanFile = (file) => {
+    const ext = String(file?.name || '').toLowerCase().split('.').pop();
+    const allowedExt = new Set(['jpg', 'jpeg', 'pdf']);
+    const allowedMime = new Set(['image/jpeg', 'application/pdf']);
+    const isAllowed = allowedExt.has(ext) || allowedMime.has(file?.type);
+
+    if (!isAllowed) {
+      notification.error({
+        message: 'Invalid file',
+        description: 'Only JPG/JPEG images and PDF files are allowed.',
+      });
+      return Upload.LIST_IGNORE;
+    }
+
+    return false;
   };
 
   const handleFileChange = (info) => {
@@ -83,24 +86,27 @@ const AddDietPlan = ({ onBack, onSaveSuccess }) => {
       formData.append('assignedCount', values.assignedCount || '');
       formData.append('assignTo', values.assignTo || '');
   
-      if (fileList.length > 0) {
+      if (fileList.length > 0 && fileList[0].originFileObj) {
         formData.append('file', fileList[0].originFileObj);
       }
-  
-      // Loop through days
-      days.forEach((day, dayIndex) => {
-        formData.append(`chartTable[${dayIndex}][day]`, day.day);  // Append the day only once per day
-  
-        // Loop through meals for each day
-        day.items.forEach((item, itemIndex) => {
-          formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Time]`, item.time ? moment(item.time).format('hh:mm A') : '');
-          formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Food]`, item.food || '');
-          formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Quantity]`, item.qty || '');
-          formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][Calorie]`, item.calorie || '');
-          formData.append(`chartTable[${dayIndex}][meals][${itemIndex}][VideoLink]`, item.videoLink || '');
-        });
-      });
-  
+
+      // Build chartTable as array so backend receives it correctly (multipart form doesn't nest arrays)
+      const chartTable = days.map((day) => ({
+        day: day.day,
+        meals: day.items.map((item) => ({
+          // AntD TimePicker may return Moment (v4) or Dayjs (v5). Both support .format().
+          // Using the instance's format() avoids incorrect coercion to midnight.
+          Time: item.time && typeof item.time.format === 'function'
+            ? item.time.format('hh:mm A')
+            : (item.time ? moment(item.time).format('hh:mm A') : ''),
+          Food: item.food || '',
+          Quantity: item.qty || '',
+          Calorie: item.calorie || '',
+          VideoLink: item.videoLink || '',
+        })),
+      }));
+      formData.append('chartTable', JSON.stringify(chartTable));
+
       await saveDietPlan(formData); // API call with form data
   
       notification.success({
@@ -147,7 +153,7 @@ const AddDietPlan = ({ onBack, onSaveSuccess }) => {
 
         <h3 style={{ marginTop: '20px', marginBottom: '10px', fontWeight: 'bold' }}>Chart Table</h3>
 
-        <div className={`add-day-button-container ${isSticky ? 'sticky' : ''}`}>
+        <div className="add-day-button-container">
           <Button type="dashed" onClick={() => addDay()} icon={<PlusOutlined />} style={{ width: '120px', textAlign: 'center' }}>
             Add Day
           </Button>
@@ -161,7 +167,18 @@ const AddDietPlan = ({ onBack, onSaveSuccess }) => {
               <Row gutter={16} key={item.id} style={{ marginBottom: '10px', textAlign: 'center' }}>
                 <Col span={isSmallScreen ? 24 : 4}>
                   <Form.Item label="Time" name={['days', dayIndex, 'items', itemIndex, 'time']}>
-                    <TimePicker use12Hours format="h:mm A" placeholder="Select Time" style={{ width: '100%' }} value={item.time} onChange={(value) => handleInputChange(dayIndex, itemIndex, 'time', value)} />
+                    <TimePicker
+                      use12Hours
+                      format="h:mm A"
+                      placeholder="Select Time"
+                      style={{ width: '100%' }}
+                      value={item.time}
+                      onChange={(value) => handleInputChange(dayIndex, itemIndex, 'time', value)}
+                      // UI stability: avoid accidental changes while scrolling/moving to OK (supported in newer AntD; ignored otherwise)
+                      changeOnScroll={false}
+                      needConfirm
+                      inputReadOnly
+                    />
                   </Form.Item>
                 </Col>
                 <Col span={isSmallScreen ? 24 : 4}>
@@ -195,8 +212,14 @@ const AddDietPlan = ({ onBack, onSaveSuccess }) => {
           </div>
         ))}
 
-        <Form.Item label="Upload Plan">
-          <Upload fileList={fileList} onChange={handleFileChange} beforeUpload={() => false}>
+        <Form.Item label="Upload Plan" extra="One file per plan. JPG/JPEG or PDF only.">
+          <Upload
+            fileList={fileList}
+            onChange={handleFileChange}
+            beforeUpload={validatePlanFile}
+            maxCount={1}
+            accept=".jpg,.jpeg,.pdf"
+          >
             <Button icon={<UploadOutlined />}>Choose File</Button>
           </Upload>
         </Form.Item>
@@ -210,13 +233,11 @@ const AddDietPlan = ({ onBack, onSaveSuccess }) => {
       <style jsx>{`
         .add-day-button-container {
           margin-top: 20px;
-          position: relative;
-        }
-        .add-day-button-container.sticky {
-          position: fixed;
-          bottom: 20px;
-          z-index: 1000;
-          transition: opacity 0.3s;
+          position: sticky;
+          top: 12px;
+          z-index: 10;
+          background: transparent;
+          padding: 0;
         }
       `}</style>
     </div>

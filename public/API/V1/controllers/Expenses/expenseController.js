@@ -5,15 +5,31 @@ const { logger } = require('../../utils/logger');
 const FileSyncService = require('../../services/fileSyncService');
 
 function mapReceiptFileToUrls(receiptFile) {
-  if (!receiptFile) return [];
-  let arr;
-  try {
-    arr = typeof receiptFile === 'string' ? JSON.parse(receiptFile) : receiptFile;
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(arr)) return [];
+  const arr = Array.isArray(receiptFile) ? receiptFile : parseReceiptFileString(receiptFile);
   return arr.map(p => FileSyncService.convertToApiUrl(p) || p);
+}
+
+/**
+ * Parse receiptFile from DB (JSON array of paths). Handles Windows paths where
+ * backslashes may be stored/returned in a way that breaks JSON.parse.
+ */
+function parseReceiptFileString(receiptFile) {
+  if (!receiptFile || typeof receiptFile !== 'string') return [];
+  const str = receiptFile.trim();
+  if (!str || str === '[]') return [];
+  try {
+    const parsed = JSON.parse(str);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e1) {
+    try {
+      const fixed = str.replace(/\\([^"\\/bfnrtu])/g, '\\\\$1');
+      const parsed = JSON.parse(fixed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e2) {
+      logger.warn(`Expense receiptFile parse failed: ${e1.message}`);
+      return [];
+    }
+  }
 }
 
 class ExpenseController { 
@@ -122,10 +138,33 @@ class ExpenseController {
         });
       }
 
+      const existing = await prisma.expense.findUnique({ where: { id: parseInt(id, 10) } });
+      const existingPaths = existing ? parseReceiptFileString(existing.receiptFile) : [];
+
+      const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+      let keptExistingPaths = existingPaths;
+      if (req.body.existingReceiptUrls) {
+        try {
+          const wantedUrls = typeof req.body.existingReceiptUrls === 'string'
+            ? JSON.parse(req.body.existingReceiptUrls) : req.body.existingReceiptUrls;
+          if (Array.isArray(wantedUrls) && wantedUrls.length >= 0) {
+            const urlSet = new Set(wantedUrls.map((u) => String(u).trim()).filter(Boolean));
+            keptExistingPaths = existingPaths.filter((p) => {
+              const url = FileSyncService.convertToApiUrl(p, apiBaseUrl);
+              return url && urlSet.has(url);
+            });
+          }
+        } catch (e) {
+          logger.warn(`Expense existingReceiptUrls parse failed: ${e.message}`);
+        }
+      }
+
+      const MAX_RECEIPTS = 5;
       let receiptFilesString;
       if (req.files && req.files.length > 0) {
-        const paths = req.files.map(f => f.path);
-        receiptFilesString = JSON.stringify(paths);
+        const newPaths = req.files.map(f => f.path);
+        const allPaths = [...keptExistingPaths, ...newPaths].slice(0, MAX_RECEIPTS);
+        receiptFilesString = JSON.stringify(allPaths);
         for (const file of req.files) {
           await FileSyncService.addToSyncQueue({
             localPath: file.path,
@@ -136,8 +175,8 @@ class ExpenseController {
           }).catch(() => {});
         }
       } else {
-        const existing = await prisma.expense.findUnique({ where: { id: parseInt(id, 10) } });
-        receiptFilesString = existing ? existing.receiptFile : '[]';
+        const paths = keptExistingPaths.slice(0, MAX_RECEIPTS);
+        receiptFilesString = paths.length > 0 ? JSON.stringify(paths) : '[]';
       }
 
       const updatedExpense = await prisma.expense.update({

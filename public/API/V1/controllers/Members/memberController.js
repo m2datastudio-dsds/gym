@@ -205,10 +205,11 @@ class MemberController {
                     member.expiryDays = 'N/A';
                 }
 
-                // Convert local file paths to API-accessible URLs
-                if (member.memberPhoto) {
-                    // Ensure file exists, restore from remote if needed
+                // Ensure files exist (restore from B2 if missing), then convert to API URLs
+                if (member.memberPhoto || member.proofDocument) {
                     await FileSyncService.ensureEntityFiles('member', member.id);
+                }
+                if (member.memberPhoto) {
                     member.memberPhoto = FileSyncService.convertToApiUrl(member.memberPhoto, apiBaseUrl);
                 }
                 if (member.proofDocument) {
@@ -491,6 +492,14 @@ class MemberController {
                 data: { proofDocument: file.path },
             });
 
+            await FileSyncService.addToSyncQueue({
+                localPath: file.path,
+                fileType: file.mimetype,
+                entityType: 'member',
+                entityId: parseInt(id, 10),
+                fieldName: 'proofDocument',
+            }).catch(() => {});
+
             return res.status(StatusCodes.OK).json({
                 code: StatusCodes.OK,
                 message: 'Proof document updated successfully',
@@ -524,6 +533,7 @@ class MemberController {
       static async getExpiredMembers(req, res) {
         try {
             const members = await prisma.member.findMany({});
+            const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
 
             const expiredMembers = members.filter(member => {
                 const { startDate, duration } = member;
@@ -532,6 +542,18 @@ class MemberController {
                 const expiryDate = MemberController.calculateExpiryDate(startDate, duration);
                 return expiryDate && moment().isAfter(expiryDate);
             });
+
+            for (const member of expiredMembers) {
+                if (member.memberPhoto || member.proofDocument) {
+                    await FileSyncService.ensureEntityFiles('member', member.id);
+                }
+                if (member.memberPhoto) {
+                    member.memberPhoto = FileSyncService.convertToApiUrl(member.memberPhoto, apiBaseUrl);
+                }
+                if (member.proofDocument) {
+                    member.proofDocument = FileSyncService.convertToApiUrl(member.proofDocument, apiBaseUrl);
+                }
+            }
 
             return res.status(StatusCodes.OK).json({
                 code: StatusCodes.OK,

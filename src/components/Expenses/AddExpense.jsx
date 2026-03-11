@@ -56,15 +56,21 @@ const AddExpense = ({ onBack }) => {
   const capturePhoto = () => {
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
-      const imageFile = {
-        uid: `photo-${fileList.length + 1}`,
-        name: `Photo_${fileList.length + 1}.png`,
-        thumbUrl: imageSrc,
-        originFileObj: dataURItoBlob(imageSrc),
-        size: imageSrc.length,
-        type: 'image/png',
-      };
-      setFileList((prevList) => [...prevList, imageFile]);
+      setFileList((prevList) => {
+        if (prevList.length >= 5) {
+          message.error('You can only upload up to 5 images.');
+          return prevList;
+        }
+        const imageFile = {
+          uid: `photo-${prevList.length + 1}`,
+          name: `Photo_${prevList.length + 1}.png`,
+          thumbUrl: imageSrc,
+          originFileObj: dataURItoBlob(imageSrc),
+          size: imageSrc.length,
+          type: 'image/png',
+        };
+        return [...prevList, imageFile];
+      });
       setShowWebcam(false);
     }
   };
@@ -329,12 +335,14 @@ const AddExpense = ({ onBack }) => {
 
         {showWebcam && (
           <div style={{ marginBottom: '20px' }}>
-            <Webcam 
-              audio={false} 
-              ref={webcamRef} 
-              screenshotFormat="image/png" 
-              width={320} 
-              height={240} 
+            <Webcam
+              key="add-expense-webcam"
+              audio={false}
+              ref={webcamRef}
+              screenshotFormat="image/png"
+              width={320}
+              height={240}
+              videoConstraints={{ width: 320, height: 240, facingMode: 'user' }}
             />
             <div style={{ marginTop: '10px' }}>
               <Button type="primary" onClick={capturePhoto} style={{ marginRight: '10px' }}>

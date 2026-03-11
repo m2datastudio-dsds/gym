@@ -6,6 +6,7 @@ var cors = require('cors');
 var app = express();
 var http = require('http').Server(app); 
 const { indexRouter } = require('./API/V1/routes/index');
+const { getUploadsDir } = require('./API/V1/middlewares/multerLocal');
 
 
 var appPort = 1818;
@@ -13,6 +14,7 @@ var appPort = 1818;
 app.use(bodyParser.json({limit: '50mb'}));
 app.use(bodyParser.urlencoded({limit: '50mb', extended: false }));
 app.use(express.static(path.resolve(__dirname)));
+app.use('/uploads', express.static(getUploadsDir()));
 
 app.use(cors({
   "origin": "*",

@@ -96,7 +96,7 @@ class ExerciseController {
   static async updateExercisePlan(req, res) {
     try {
       const { id } = req.params;
-      const { planname, warmUp, details, assign } = req.body;
+      const { planname, warmUp, details, assign, removeFile } = req.body;
 
       // Validate required fields
       if (!planname || !details) {
@@ -171,7 +171,9 @@ class ExerciseController {
           warmUp,
           details: detailsString, // Save the details as a JSON string
           assign,
-          file: uploadedFileLocation || existingPlan.file // Keep the old file if no new file is uploaded
+          file: uploadedFileLocation
+            ? uploadedFileLocation
+            : (String(removeFile).toLowerCase() === 'true' ? null : existingPlan.file),
         },
       });
 
