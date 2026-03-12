@@ -3,6 +3,26 @@
 // Modules to control application life and create native browser window
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require("node:path");
+const fs = require("node:fs");
+
+// Packaged app only: use userData for DB so auto-updater never overwrites it.
+// Seed from resources/DB/dev.db on first run; then always use userData path.
+if (app.isPackaged && process.versions && process.versions.electron) {
+  const userDataPath = app.getPath("userData");
+  const dbDir = path.join(userDataPath, "DB");
+  const dbPath = path.join(dbDir, "dev.db");
+  if (!fs.existsSync(dbPath)) {
+    try {
+      if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+      const seedPath = path.join(process.resourcesPath, "DB", "dev.db");
+      if (fs.existsSync(seedPath)) fs.copyFileSync(seedPath, dbPath);
+    } catch (e) {
+      console.warn("Could not seed DB to userData:", e.message);
+    }
+  }
+  process.env.DB_PATH = dbPath;
+}
+
 const server = require("./server");
 
 let isDev;

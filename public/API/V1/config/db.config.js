@@ -1,9 +1,14 @@
 const { PrismaClient } = require("../electron/client");
 const path = require("path");
 
-// From public/API/V1/config: 4 levels up = project root, then DB/dev.db
-// Works for: node server.js (project root) and packaged app (build/public/API/V1/config)
-const dbPath = path.join(__dirname, "../../../../DB/dev.db");
+// 1) Packaged app: main.js sets process.env.DB_PATH to userData/DB/dev.db (survives auto-update).
+// 2) Dev / node server.js: DB stays in project at DB/dev.db (no userData in dev).
+let dbPath;
+if (typeof process !== "undefined" && process.env.DB_PATH) {
+  dbPath = process.env.DB_PATH;
+} else {
+  dbPath = path.join(__dirname, "../../../../DB/dev.db");
+}
 
 const prisma = new PrismaClient({
     log: ["error"],
